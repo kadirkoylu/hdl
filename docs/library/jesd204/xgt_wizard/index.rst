@@ -26,7 +26,7 @@ configuration for a JESD204B interface.
    :xilinx:`UG578 <support/documentation/user_guides/ug578-ultrascale-gty-transceivers.pdf>`
    and :xilinx:`PG168 <support/documentation/user_guides/pg168-gtwizard.pdf>`.
 
-Required features by the JESD204B
+Required features by the JESD204B/C interface
 --------------------------------------------------------------------------------
 
 The following features are required for a JESD204B interface:
@@ -39,6 +39,16 @@ The following features are required for a JESD204B interface:
 - Tx configurable driver
 - Polarity control
 
+For JESD204C, the following features are used instead of or in addition to the
+above:
+
+- 64B/66B encoding and decoding
+- Wider internal data widths (64-bit user data, 66-bit internal)
+
+The JESD mode (8B10B or 64B66B) is selected via the ``JESD_MODE`` parameter
+during the build. JESD204C (64B66B) is currently supported on ZCU102 (GTHE4)
+and VCU118 (GTYE4). All other carriers support only JESD204B (8B10B).
+
 There are 3 flows for generating transceivers using the wizard
 -------------------------------------------------------------------------------
 
@@ -49,10 +59,11 @@ wizard manually as explained below:
 :ref:`Using_the_GUI_of_the_Wizard <xgt_wizard_gui_of_the_wizard>` ,
 and a third one that uses a script to generate one or more configurations:
 :ref:`Using_the_generator_script <xgt_wizard_generator_script>` .
-Please keep in mind that the script is capable of generating only **configurations
-where the TX ad RX lane rates are even and supports only JESD204B**. For more
-customization, you can use the script to generate the configurations, then edit
-them manually as you please.
+The automated flow and the generator script support both **JESD204B (8B10B)** and
+**JESD204C (64B66B)** modes, as well as configurations where **TX and RX use
+different PLL types, lane rates or reference clocks**. For more customization,
+you can use the script to generate the configurations, then edit them manually as
+you please.
 
 If you used the script method, there is another script that parses the generated
 configurations and generates a list containing only the parameters that are
@@ -72,39 +83,67 @@ and supporting Tcl scripts.
 The automated transceiver configuration flow is currently integrated into the
 following projects:
 
+- :git-hdl:`AD9081_FMCA_EBZ <projects/ad9081_fmca_ebz>`
+- :git-hdl:`AD9083_EVB <projects/ad9083_evb>`
+- :git-hdl:`ADRV9009 <projects/adrv9009>`
+- :git-hdl:`ADRV9026 <projects/adrv9026>`
+- :git-hdl:`ADRV9371x <projects/adrv9371x>`
 - :git-hdl:`DAQ2 <projects/daq2>`
 - :git-hdl:`DAQ3 <projects/daq3>`
-- :git-hdl:`ADRV9009 <projects/adrv9009>`
-- :git-hdl:`ADRV9371x <projects/adrv9371x>`
 
 xcvr_wizard
 *******************************************************************************
 
 The :git-hdl:`xcvr_wizard HDL project <projects/xcvr_wizard>` is used
 internally to generate transceiver configuration files based on a set of
-parameters:
+parameters. It supports the following carrier boards:
 
-- LANE_RATE: lane speed in Gbps
-- REF_CLK: reference clock frequency in MHz
-- PLL_TYPE: the type of PLL used (CPLL or QPLL)
+========  =======  ================  ==================
+Carrier   GT Type  JESD204B (8B10B)  JESD204C (64B66B)
+========  =======  ================  ==================
+ZC706     GTXE2    Yes               No
+KC705     GTXE2    Yes               No
+KCU105    GTHE3    Yes               No
+ZCU102    GTHE4    Yes               Yes
+VCU118    GTYE4    Yes               Yes
+========  =======  ================  ==================
 
-It builds a Vivado project for a specific carrier and configuration, producing
-files such as GT_Type_cfng.txt and, for GTXE2 devices,
-gtxe2_<plltype>_<rate>_<refclk>_common.v. These files are later parsed by
+The required parameters are:
+
+- **LANE_RATE**: Lane speed in Gbps (applies to both TX and RX)
+- **REF_CLK**: Reference clock frequency in MHz
+- **PLL_TYPE**: The type of PLL used (CPLL, QPLL, QPLL0 or QPLL1)
+
+The following optional parameters allow configuring the RX path independently
+from TX. When not provided (or set to empty ``{}``), the RX path uses the same
+values as TX, preserving backward compatibility:
+
+- **XCVR_RX_PLL_TYPE**: PLL type for the RX path (e.g., CPLL when TX uses QPLL0)
+- **XCVR_RX_LANE_RATE**: Lane speed in Gbps for the RX path
+- **XCVR_RX_REF_CLK**: Reference clock frequency in MHz for the RX path
+
+On UltraScale/UltraScale+ devices (ZCU102, VCU118), the JESD mode can also be
+selected:
+
+- **JESD_MODE**: Link layer encoding mode (``8B10B`` or ``64B66B``, default: ``8B10B``)
+
+The project builds a Vivado design for a specific carrier and configuration,
+producing files such as ``GT_Type_cfng.txt`` and, for GTXE2 devices,
+``gtxe2_<plltype>_<rate>_<refclk>_common.v``. These files are later parsed by
 automation scripts to extract only the required configuration parameters.
 
 adi_xcvr_project
 *******************************************************************************
 
-This function builds the `xcvr_wizard` using user-defined parameters. These
+This function builds the ``xcvr_wizard`` using user-defined parameters. These
 values define the configuration for which the transceiver settings will be
-generated. The function returns a dictionary (`xcvr_config_paths`) with the
+generated. The function returns a dictionary (``xcvr_config_paths``) with the
 paths to the generated files.
 
-In the HDL build flow, it is called from `system_project.tcl`, located in the
-carrier-specific folder (e.g., `projects/<carrier>/system_project.tcl`).
+In the HDL build flow, it is called from ``system_project.tcl``, located in the
+carrier-specific folder (e.g., ``projects/<project>/carrier/system_project.tcl``).
 
-**Example:**
+**Basic example** (same PLL for TX and RX):
 
 .. code-block:: tcl
 
@@ -115,6 +154,41 @@ carrier-specific folder (e.g., `projects/<carrier>/system_project.tcl`).
      REF_CLK 500
      PLL_TYPE QPLL
    ]]
+
+**Example with separate RX PLL type** (TX uses QPLL0, RX uses CPLL):
+
+.. code-block:: tcl
+
+   global xcvr_config_paths
+
+   set xcvr_config_paths [adi_xcvr_project [list
+     LANE_RATE        [get_env_param LANE_RATE        9.83]
+     REF_CLK          [get_env_param REF_CLK        245.76]
+     PLL_TYPE         [get_env_param PLL_TYPE        QPLL0]
+     XCVR_RX_PLL_TYPE [get_env_param XCVR_RX_PLL_TYPE CPLL]
+   ]]
+
+**Example with all RX parameters different from TX:**
+
+.. code-block:: tcl
+
+   global xcvr_config_paths
+
+   set xcvr_config_paths [adi_xcvr_project [list
+     LANE_RATE          [get_env_param LANE_RATE          16.22]
+     REF_CLK            [get_env_param REF_CLK          491.52]
+     PLL_TYPE           [get_env_param PLL_TYPE          QPLL0]
+     XCVR_RX_LANE_RATE  [get_env_param XCVR_RX_LANE_RATE  9.83]
+     XCVR_RX_REF_CLK    [get_env_param XCVR_RX_REF_CLK 245.76]
+     XCVR_RX_PLL_TYPE   [get_env_param XCVR_RX_PLL_TYPE  CPLL]
+   ]]
+
+These parameters can also be overridden from the command line:
+
+.. code-block:: bash
+
+   make LANE_RATE=9.83 REF_CLK=245.76 PLL_TYPE=QPLL0 XCVR_RX_PLL_TYPE=CPLL
+   make LANE_RATE=16.22 REF_CLK=491.52 PLL_TYPE=QPLL0 XCVR_RX_LANE_RATE=9.83 XCVR_RX_REF_CLK=245.76 XCVR_RX_PLL_TYPE=CPLL
 
 adi_xcvr_parameters
 *******************************************************************************
@@ -310,7 +384,7 @@ IPs with all the combinations between the lane rate and reference clock.
 
 .. code-block:: tcl
 
-   ad_gth_generator {9.8304 4.9152} QPLL0 {245.76 122.88} false
+   ad_gth_generator {9.8304 4.9152} QPLL0 {245.76 122.88}
 
 This call makes 4 instances of transceivers. Now you can double click on the
 <ip_name>.xci from the sources window to further customize the IP, including
@@ -318,17 +392,21 @@ configurations where RX and TX have different rates. After you are all set,
 run the Parsing_script to get the list of parameters that need to be changed
 into the project.
 
+Three optional parameters allow configuring the RX path independently from TX:
+
+.. code-block:: tcl
+
+   ad_gth_generator {9.8304} QPLL0 {245.76} CPLL {} {}
+
+The fourth parameter is the RX PLL type, the fifth is the RX lane rate and the
+sixth is the RX reference clock. When left empty, they default to the TX values.
+
 get_diff_params
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 **Recommended method for generating a single configuration**
 
 This function generates the IP and calls the parsing script.
-
-.. note::
-
-   This method works only with configurations where TX and RX have the same
-   lane rate
 
 Call the get_diff_params method with the desired parameters.
 
@@ -341,13 +419,20 @@ TX. The second one can be CPLL, QPLL0, QPLL1. The third one is the reference
 clock. If left empty, then it will be filled with all the viable values for
 the lane rate given.
 
+Three optional parameters (4th, 5th, 6th) allow configuring the RX path
+independently. When left empty, they default to the TX values:
+
 .. code-block:: tcl
 
-   get_diff_params {9.8304} QPLL0 {} false
+   get_diff_params {9.8304} QPLL0 {245.76} CPLL {} {}
 
-The fourth parameter is optional. If you set it to false, the script will
-remove from the project and delete from disk the generated IPs after the
+The 7th parameter controls IP cleanup. If you set it to ``false``, the script
+will remove from the project and delete from disk the generated IPs after the
 list of parameters is done, so you don't have to do that manually.
+
+.. code-block:: tcl
+
+   get_diff_params {9.8304} QPLL0 {} {} {} {} false
 
 Both the first and the third parameters are actually lists, so you can use
 that to generate multiple configurations. Keep in mind that the script will
@@ -356,10 +441,9 @@ clock.
 
 .. code-block:: tcl
 
-   get_diff_params {9.8304 4.9152} QPLL0 {245.76 122.88} false
+   get_diff_params {9.8304 4.9152} QPLL0 {245.76 122.88}
 
-This call makes 4 instances of transceivers, and also deletes them after
-generating the list because of the 4th parameter is set to false.
+This call makes 4 instances of transceivers.
 
 Parsing script
 ********************************************************************************
