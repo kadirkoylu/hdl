@@ -1,5 +1,5 @@
 ###############################################################################
-## Copyright (C) 2015-2025 Analog Devices, Inc. All rights reserved.
+## Copyright (C) 2015-2026 Analog Devices, Inc. All rights reserved.
 ### SPDX short identifier: ADIBSD
 ###############################################################################
 
@@ -122,18 +122,26 @@ set_property -dict [list \
 ] [ipx::get_user_parameters ALMOST_EMPTY_THRESHOLD -of_objects $cc]
 
 set_property -dict [list \
+	"value_validation_type" "list" \
+  "value_validation_list" "0 1" \
+] [ipx::get_user_parameters TLAST_DEFAULT -of_objects $cc]
+
+set_property -dict [list \
 	"value_validation_type" "range_long" \
 	"value_validation_range_minimum" "1" \
+	"value_validation_range_maximum" "4096" \
 ] [ipx::get_user_parameters TUSER_WIDTH -of_objects $cc]
 
 set_property -dict [list \
 	"value_validation_type" "range_long" \
 	"value_validation_range_minimum" "1" \
+	"value_validation_range_maximum" "8" \
 ] [ipx::get_user_parameters TID_WIDTH -of_objects $cc]
 
 set_property -dict [list \
 	"value_validation_type" "range_long" \
 	"value_validation_range_minimum" "1" \
+	"value_validation_range_maximum" "8" \
 ] [ipx::get_user_parameters TDEST_WIDTH -of_objects $cc]
 
 set_property -dict [list \
@@ -162,6 +170,21 @@ foreach {k v} { \
 		"value" $v \
 	] [ipx::get_hdl_parameters $k -of_objects $cc]
 }
+
+set_property -dict [list \
+  "enablement_tcl_expr" "\$TUSER_EN == true" \
+] \
+[ipx::get_user_parameters TUSER_WIDTH -of_objects $cc]
+
+set_property -dict [list \
+  "enablement_tcl_expr" "\$TID_EN == true" \
+] \
+[ipx::get_user_parameters TID_WIDTH -of_objects $cc]
+
+set_property -dict [list \
+  "enablement_tcl_expr" "\$TDEST_EN == true" \
+] \
+[ipx::get_user_parameters TDEST_WIDTH -of_objects $cc]
 
 ## Customize IP layout
 
@@ -229,7 +252,13 @@ set_property -dict [list \
 	"display_name" "TLAST Enable" \
 	"tooltip" "\[TLAST_EN\] Enable the TLAST for the AXI stream interface, signaling packet boundaries." \
 ] [ipgui::get_guiparamspec -name "TLAST_EN" -component $cc]
-set_property driver_value 1 [ipx::get_ports s_axis_tlast -of_objects $cc]
+ipgui::add_param -name "TLAST_DEFAULT" -component $cc -parent $interface_group
+set_property -dict [list \
+	"widget" "comboBox" \
+	"display_name" "TLAST signal default value" \
+	"tooltip" "\[TLAST_DEFAULT\] TLAST signal default value." \
+] [ipgui::get_guiparamspec -name "TLAST_DEFAULT" -component $cc]
+set_property driver_value 0 [ipx::get_ports s_axis_tlast -of_objects $cc]
 
 ipgui::add_param -name "TUSER_EN" -component $cc -parent $interface_group
 set_property -dict [list \

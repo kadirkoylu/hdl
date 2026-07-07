@@ -49,44 +49,45 @@ module util_axis_fifo_asym #(
   parameter TID_EN = 0,
   parameter TDEST_EN = 0,
   parameter TUSER_BITS_PER_BYTE = 0,
+  parameter TLAST_DEFAULT = 1,
   parameter TUSER_WIDTH = 1,
   parameter TID_WIDTH = 1,
   parameter TDEST_WIDTH = 1,
   parameter REDUCED_FIFO = 1
 ) (
-  input                       m_axis_aclk,
-  input                       m_axis_aresetn,
-  input                       m_axis_ready,
-  output                      m_axis_valid,
-  output [M_DATA_WIDTH-1:0]   m_axis_data,
-  output [M_DATA_WIDTH/8-1:0] m_axis_tkeep,
-  output [M_DATA_WIDTH/8-1:0] m_axis_tstrb,
-  output                      m_axis_tlast,
-  output [TUSER_WIDTH-1:0]    m_axis_tuser,
-  output [TID_WIDTH-1:0]      m_axis_tid,
-  output [TDEST_WIDTH-1:0]    m_axis_tdest,
-  output                      m_axis_empty,
-  output                      m_axis_almost_empty,
-  output                      m_axis_full,
-  output                      m_axis_almost_full,
-  output [ADDRESS_WIDTH+9:0]  m_axis_level,
+  input                                                                           m_axis_aclk,
+  input                                                                           m_axis_aresetn,
+  input                                                                           m_axis_ready,
+  output                                                                          m_axis_valid,
+  output [M_DATA_WIDTH-1:0]                                                       m_axis_data,
+  output [M_DATA_WIDTH/8-1:0]                                                     m_axis_tkeep,
+  output [M_DATA_WIDTH/8-1:0]                                                     m_axis_tstrb,
+  output                                                                          m_axis_tlast,
+  output [((TUSER_BITS_PER_BYTE) ? TUSER_WIDTH*M_DATA_WIDTH/8 : TUSER_WIDTH)-1:0] m_axis_tuser,
+  output [TID_WIDTH-1:0]                                                          m_axis_tid,
+  output [TDEST_WIDTH-1:0]                                                        m_axis_tdest,
+  output                                                                          m_axis_empty,
+  output                                                                          m_axis_almost_empty,
+  output                                                                          m_axis_full,
+  output                                                                          m_axis_almost_full,
+  output [ADDRESS_WIDTH+9:0]                                                      m_axis_level,
 
-  input                       s_axis_aclk,
-  input                       s_axis_aresetn,
-  output                      s_axis_ready,
-  input                       s_axis_valid,
-  input  [S_DATA_WIDTH-1:0]   s_axis_data,
-  input  [S_DATA_WIDTH/8-1:0] s_axis_tkeep,
-  input  [S_DATA_WIDTH/8-1:0] s_axis_tstrb,
-  input                       s_axis_tlast,
-  input  [TUSER_WIDTH-1:0]    s_axis_tuser,
-  input  [TID_WIDTH-1:0]      s_axis_tid,
-  input  [TDEST_WIDTH-1:0]    s_axis_tdest,
-  output                      s_axis_empty,
-  output                      s_axis_almost_empty,
-  output                      s_axis_full,
-  output                      s_axis_almost_full,
-  output [ADDRESS_WIDTH+9:0]  s_axis_room
+  input                                                                           s_axis_aclk,
+  input                                                                           s_axis_aresetn,
+  output                                                                          s_axis_ready,
+  input                                                                           s_axis_valid,
+  input  [S_DATA_WIDTH-1:0]                                                       s_axis_data,
+  input  [S_DATA_WIDTH/8-1:0]                                                     s_axis_tkeep,
+  input  [S_DATA_WIDTH/8-1:0]                                                     s_axis_tstrb,
+  input                                                                           s_axis_tlast,
+  input  [((TUSER_BITS_PER_BYTE) ? TUSER_WIDTH*S_DATA_WIDTH/8 : TUSER_WIDTH)-1:0] s_axis_tuser,
+  input  [TID_WIDTH-1:0]                                                          s_axis_tid,
+  input  [TDEST_WIDTH-1:0]                                                        s_axis_tdest,
+  output                                                                          s_axis_empty,
+  output                                                                          s_axis_almost_empty,
+  output                                                                          s_axis_full,
+  output                                                                          s_axis_almost_full,
+  output [ADDRESS_WIDTH+9:0]                                                      s_axis_room
 );
 
   // define which interface has a wider bus
@@ -97,18 +98,10 @@ module util_axis_fifo_asym #(
 
   // atomic parameters
   localparam A_DATA_WIDTH = (RATIO_TYPE) ? M_DATA_WIDTH : S_DATA_WIDTH;
-  localparam A_ADDRESS_WIDTH = (REDUCED_FIFO) ? (ADDRESS_WIDTH-$clog2(RATIO)) : ADDRESS_WIDTH;
-  localparam A_ALMOST_FULL_THRESHOLD = (REDUCED_FIFO) ? ((ALMOST_FULL_THRESHOLD+RATIO-1)/RATIO) : ALMOST_FULL_THRESHOLD;
-  localparam A_ALMOST_EMPTY_THRESHOLD = (REDUCED_FIFO) ? ((ALMOST_EMPTY_THRESHOLD+RATIO-1)/RATIO) : ALMOST_EMPTY_THRESHOLD;
-  localparam A_TUSER_WIDTH = (TUSER_BITS_PER_BYTE) ? TUSER_WIDTH / RATIO : TUSER_WIDTH;
-
-  localparam MEM_WORD = (TKEEP_EN & TLAST_EN) ? (A_WIDTH+A_WIDTH/8+1) :
-                        (TKEEP_EN)            ? (A_WIDTH+A_WIDTH/8)   :
-                        (TLAST_EN)            ? (A_WIDTH+1)           :
-                                                (A_WIDTH);
-
-  wire [MEM_WORD-1:0] slice_s_data [RATIO-1:0];
-  wire [MEM_WORD-1:0] slice_m_data [RATIO-1:0];
+  localparam A_ADDRESS_WIDTH = (REDUCED_FIFO) ? ADDRESS_WIDTH-$clog2(RATIO) : ADDRESS_WIDTH;
+  localparam A_ALMOST_FULL_THRESHOLD = (REDUCED_FIFO) ? $floor((ALMOST_FULL_THRESHOLD+RATIO-1)/RATIO) : ALMOST_FULL_THRESHOLD;
+  localparam A_ALMOST_EMPTY_THRESHOLD = (REDUCED_FIFO) ? $floor((ALMOST_EMPTY_THRESHOLD+RATIO-1)/RATIO) : ALMOST_EMPTY_THRESHOLD;
+  localparam A_TUSER_WIDTH = (TUSER_BITS_PER_BYTE) ? TUSER_WIDTH/RATIO : TUSER_WIDTH;
 
   // slave and master sequencers
   reg [$clog2(RATIO)-1:0] s_axis_counter;
@@ -144,12 +137,6 @@ module util_axis_fifo_asym #(
   wire [RATIO-1:0]                 s_axis_almost_full_int_s;
   wire [RATIO*A_ADDRESS_WIDTH-1:0] s_axis_room_int_s;
 
-  wire [RATIO-1:0] fifo_s_ready;
-  wire [RATIO-1:0] fifo_s_valid;
-  wire [RATIO*A_WIDTH-1:0] fifo_s_data;
-  wire [RATIO*A_WIDTH/8-1:0] fifo_s_tkeep;
-  wire [RATIO-1:0] fifo_s_tlast;
-
   // instantiate the FIFOs
   genvar i;
   generate
@@ -167,6 +154,7 @@ module util_axis_fifo_asym #(
         .TUSER_EN(TUSER_EN),
         .TID_EN(TID_EN),
         .TDEST_EN(TDEST_EN),
+        .TLAST_DEFAULT(TLAST_DEFAULT),
         .TUSER_WIDTH(A_TUSER_WIDTH),
         .TID_WIDTH(TID_WIDTH),
         .TDEST_WIDTH(TDEST_WIDTH)
@@ -212,7 +200,7 @@ module util_axis_fifo_asym #(
     if (RATIO_TYPE) begin : big_slave
 
       for (i=0; i<RATIO; i=i+1) begin: gen_tlast_big_slave
-        assign s_axis_valid_int_s[i] = s_axis_valid & s_axis_ready;
+        assign s_axis_valid_int_s[i] = s_axis_valid && s_axis_ready;
 
         if (TLAST_EN) begin
           assign s_axis_tlast_int_s[i] = (i==RATIO-1) ? s_axis_tlast : 1'b0;
@@ -271,8 +259,8 @@ module util_axis_fifo_asym #(
       // if one of the atomic instance is full, s_axis_full is asserted
       assign s_axis_empty = |s_axis_empty_int_s;
       assign s_axis_almost_empty = |s_axis_almost_empty_int_s;
-      assign s_axis_full = |s_axis_full_int_s;
-      assign s_axis_almost_full = |s_axis_almost_full_int_s;
+      assign s_axis_full = &s_axis_full_int_s;
+      assign s_axis_almost_full = &s_axis_almost_full_int_s;
       // the FIFO has the same room as the atomic FIFO
       assign s_axis_room = s_axis_room_int_s[A_ADDRESS_WIDTH-1:0];
 
@@ -425,7 +413,7 @@ module util_axis_fifo_asym #(
       if (TLAST_EN) begin
         assign m_axis_tlast = m_axis_tlast_int_s >> m_axis_counter;
       end else begin
-        assign m_axis_tlast = 1'b1;
+        assign m_axis_tlast = TLAST_DEFAULT;
       end
 
       // the FIFO has the same level as the last atomic instance
@@ -440,7 +428,7 @@ module util_axis_fifo_asym #(
     end else begin : big_master
 
       for (i=0; i<RATIO; i=i+1) begin: gen_ready_big_master
-        assign m_axis_ready_int_s[i] = m_axis_ready & (&m_axis_valid_int_s);
+        assign m_axis_ready_int_s[i] = m_axis_ready && (&m_axis_valid_int_s);
       end
 
       for (i=0; i<RATIO; i=i+1) begin
@@ -516,7 +504,7 @@ module util_axis_fifo_asym #(
       if (TLAST_EN) begin
         assign m_axis_tlast = (m_axis_valid) ? |m_axis_tlast_int_s : 1'b0;
       end else begin
-        assign m_axis_tlast = 1'b1;
+        assign m_axis_tlast = TLAST_DEFAULT;
       end
 
     end

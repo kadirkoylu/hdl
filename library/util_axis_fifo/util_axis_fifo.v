@@ -1,6 +1,6 @@
 // ***************************************************************************
 // ***************************************************************************
-// Copyright (C) 2014-2025 Analog Devices, Inc. All rights reserved.
+// Copyright (C) 2014-2026 Analog Devices, Inc. All rights reserved.
 //
 // In this HDL repository, there are many different and unique modules, consisting
 // of various HDL (Verilog or VHDL) components. The individual modules are
@@ -47,6 +47,7 @@ module util_axis_fifo #(
   parameter TUSER_EN = 0,
   parameter TID_EN = 0,
   parameter TDEST_EN = 0,
+  parameter TLAST_DEFAULT = 1,
   parameter TUSER_WIDTH = 1,
   parameter TID_WIDTH = 1,
   parameter TDEST_WIDTH = 1
@@ -85,17 +86,6 @@ module util_axis_fifo #(
   output                     s_axis_full,
   output                     s_axis_almost_full
 );
-
-  localparam MEM_WORD = DATA_WIDTH +
-                        ((TKEEP_EN) ? (DATA_WIDTH/8) : 0) +
-                        ((TSTRB_EN) ? (DATA_WIDTH/8) : 0) +
-                        ((TLAST_EN) ? 1              : 0) +
-                        ((TUSER_EN) ? TUSER_WIDTH    : 0) +
-                        ((TID_EN)   ? TID_WIDTH      : 0) +
-                        ((TDEST_EN) ? TDEST_WIDTH    : 0);
-
-  wire [MEM_WORD-1:0] s_axis_data_int_s;
-  wire [MEM_WORD-1:0] m_axis_data_int_s;
 
   generate if (ADDRESS_WIDTH == 0) begin : zerodeep /* it's not a real FIFO, just a 1 stage pipeline */
 
@@ -150,7 +140,7 @@ module util_axis_fifo #(
         if (s_axis_aresetn == 1'b0) begin
           s_axis_waddr <= 1'b0;
         end else begin
-          if (s_axis_ready & s_axis_valid) begin
+          if (s_axis_ready && s_axis_valid) begin
             s_axis_waddr <= s_axis_waddr + 1'b1;
           end
         end
@@ -160,7 +150,7 @@ module util_axis_fifo #(
         if (m_axis_aresetn == 1'b0) begin
           m_axis_raddr <= 1'b0;
         end else begin
-          if (m_axis_valid & m_axis_ready) begin
+          if (m_axis_valid && m_axis_ready) begin
             m_axis_raddr <= m_axis_raddr + 1'b1;
           end
         end
@@ -218,7 +208,7 @@ module util_axis_fifo #(
         end
         assign m_axis_tlast = axis_tlast_d;
       end else begin
-        assign m_axis_tlast = 1'b1;
+        assign m_axis_tlast = TLAST_DEFAULT;
       end
 
       // TUSER support
@@ -288,7 +278,7 @@ module util_axis_fifo #(
 
       assign m_axis_data = axis_data_d;
       assign m_axis_valid = axis_valid_d;
-      assign s_axis_ready = m_axis_ready | ~m_axis_valid;
+      assign s_axis_ready = m_axis_ready || ~m_axis_valid;
       assign m_axis_empty = 1'b0;
       assign m_axis_almost_empty = 1'b0;
       assign m_axis_full = 1'b0;
@@ -367,7 +357,7 @@ module util_axis_fifo #(
         end
         assign m_axis_tlast = axis_tlast_d;
       end else begin
-        assign m_axis_tlast = 1'b1;
+        assign m_axis_tlast = TLAST_DEFAULT;
       end
 
       // TUSER support
@@ -428,6 +418,17 @@ module util_axis_fifo #(
 
   end else begin : fifo /* ADDRESS_WIDTH != 0 - this is a real FIFO implementation */
 
+    localparam MEM_WORD = DATA_WIDTH +
+                          ((TKEEP_EN) ? (DATA_WIDTH/8) : 0) +
+                          ((TSTRB_EN) ? (DATA_WIDTH/8) : 0) +
+                          ((TLAST_EN) ? 1              : 0) +
+                          ((TUSER_EN) ? TUSER_WIDTH    : 0) +
+                          ((TID_EN)   ? TID_WIDTH      : 0) +
+                          ((TDEST_EN) ? TDEST_WIDTH    : 0);
+
+    wire [MEM_WORD-1:0] s_axis_data_int_s;
+    wire [MEM_WORD-1:0] m_axis_data_int_s;
+
     wire [ADDRESS_WIDTH-1:0] s_axis_waddr;
     wire [ADDRESS_WIDTH-1:0] m_axis_raddr;
     wire _m_axis_ready;
@@ -453,7 +454,7 @@ module util_axis_fifo #(
       end
     end
 
-    assign s_mem_write = s_axis_ready & s_axis_valid;
+    assign s_mem_write = s_axis_ready && s_axis_valid;
     assign m_mem_read = (~valid || m_axis_ready) && _m_axis_valid;
 
     util_axis_fifo_address_generator #(
@@ -527,7 +528,7 @@ module util_axis_fifo #(
       assign s_axis_data_int_s[MEM_WORD_LAST-1-:1] = s_axis_tlast;
       assign m_axis_tlast = m_axis_data_int_s[MEM_WORD_LAST-1-:1];
     end else begin
-      assign m_axis_tlast = 1'b1;
+      assign m_axis_tlast = TLAST_DEFAULT;
     end
 
     if (TUSER_EN) begin
