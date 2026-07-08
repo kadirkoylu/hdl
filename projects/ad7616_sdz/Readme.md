@@ -1,4 +1,4 @@
-# AD7616-SDZ HDL Project
+# AD7616-SDZ HDL Project   
 
 Here are some pointers to help you:
   * [Board Product Page](https://www.analog.com/EVAL-AD7616)
